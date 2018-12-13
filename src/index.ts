@@ -28,7 +28,9 @@ type ProtobufConfig = {
         "no-create": boolean,
         "no-verify": boolean,
         "no-convert": boolean,
-        "no-delimited": boolean
+        "no-delimited": boolean,
+        "name_spance": string
+
     },
 
     sourceRoot: string,
@@ -46,6 +48,7 @@ const pbconfigContent = JSON.stringify({
     },
     sourceRoot: "protofile",
     outputFile: "bundles/protobuf-bundles.js"
+
 } as ProtobufConfig, null, '\t');
 
 async function generate(rootDir: string) {
@@ -76,6 +79,7 @@ async function generate(rootDir: string) {
     if (protoList.length == 0) {
         throw ' protofile 文件夹中不存在 .proto 文件'
     }
+
     await Promise.all(protoList.map(async (protofile) => {
         const content = await fs.readFileAsync(path.join(protoRoot, protofile), 'utf-8')
         if (content.indexOf('package') == -1) {
@@ -83,10 +87,13 @@ async function generate(rootDir: string) {
         }
     }))
 
-
-
-
+    const namespance = pbconfig.options.name_spance;
     const args = ['-t', 'static', '--keep-case', '-p', protoRoot, protoList.join(" "), '-o', tempfile]
+    if (namespance) {
+        args.push("-r")
+        args.push(namespance)
+    }
+
     if (pbconfig.options['no-create']) {
         args.unshift('--no-create');
     }
@@ -99,15 +106,32 @@ async function generate(rootDir: string) {
     if (pbconfig.options["no-delimited"]) {
         args.unshift("--no-delimited")
     }
+
     await shell('pbjs', args);
     let pbjsResult = await fs.readFileAsync(tempfile, 'utf-8');
     pbjsResult = 'var $protobuf = window.protobuf;\n$protobuf.roots.default=window;\n' + pbjsResult;
+    if (namespance) {
+        pbjsResult = pbjsResult.replace(/\$root/ig, namespance)
+    }
+    // pbjsResult = pbjsResult + '\n$protobuf.roots.default.${namespance}=${namespance};'
     await fs.writeFileAsync(output, pbjsResult, 'utf-8');
     const minjs = UglifyJS.minify(pbjsResult);
     await fs.writeFileAsync(output.replace('.js', '.min.js'), minjs.code, 'utf-8');
-    await shell('pbts', ['--main', output, '-o', tempfile]);
+    let pbts_args = ['--main', output, '-o', tempfile]
+    if (namespance) {
+        pbts_args.push("-n")
+        pbts_args.push(namespance)
+    }
+    await shell('pbts', pbts_args);
     let pbtsResult = await fs.readFileAsync(tempfile, 'utf-8');
-    pbtsResult = pbtsResult.replace(/\$protobuf/gi, "protobuf").replace(/export namespace/gi, 'declare namespace');
+
+    pbtsResult = pbtsResult.replace(/\$protobuf/gi, "protobuf")
+        .replace(/export namespace/gi, 'declare namespace')
+    if (namespance) {
+
+        pbtsResult = pbtsResult.replace(`export = ${namespance};`, "")
+    }
+    //  .replace(/export = (.)+;$/ig, "");
     pbtsResult = 'type Long = protobuf.Long;\n' + pbtsResult;
     await fs.writeFileAsync(output.replace(".js", ".d.ts"), pbtsResult, 'utf-8');
     await fs.removeAsync(tempfile);

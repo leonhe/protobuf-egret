@@ -14,8 +14,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     function step(op) {
         if (f) throw new TypeError("Generator is already executing.");
         while (_) try {
-            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
-            if (y = 0, t) op = [0, t.value];
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
             switch (op[0]) {
                 case 0: case 1: t = op; break;
                 case 4: _.label++; return { value: op[1], done: false };
@@ -66,7 +66,7 @@ var pbconfigContent = JSON.stringify({
 }, null, '\t');
 function generate(rootDir) {
     return __awaiter(this, void 0, void 0, function () {
-        var pbconfigPath, pbconfigPath_1, pbconfig, tempfile, output, dirname, protoRoot, fileList, protoList, args, pbjsResult, minjs, pbtsResult;
+        var pbconfigPath, pbconfigPath_1, pbconfig, tempfile, output, dirname, protoRoot, fileList, protoList, namespance, args, pbjsResult, minjs, pbts_args, pbtsResult;
         var _this = this;
         return __generator(this, function (_a) {
             switch (_a.label) {
@@ -128,7 +128,12 @@ function generate(rootDir) {
                         }); }))];
                 case 14:
                     _a.sent();
+                    namespance = pbconfig.options.name_spance;
                     args = ['-t', 'static', '--keep-case', '-p', protoRoot, protoList.join(" "), '-o', tempfile];
+                    if (namespance) {
+                        args.push("-r");
+                        args.push(namespance);
+                    }
                     if (pbconfig.options['no-create']) {
                         args.unshift('--no-create');
                     }
@@ -148,20 +153,35 @@ function generate(rootDir) {
                 case 16:
                     pbjsResult = _a.sent();
                     pbjsResult = 'var $protobuf = window.protobuf;\n$protobuf.roots.default=window;\n' + pbjsResult;
+                    if (namespance) {
+                        pbjsResult = pbjsResult.replace(/\$root/ig, namespance);
+                    }
+                    // pbjsResult = pbjsResult + '\n$protobuf.roots.default.${namespance}=${namespance};'
                     return [4 /*yield*/, fs.writeFileAsync(output, pbjsResult, 'utf-8')];
                 case 17:
+                    // pbjsResult = pbjsResult + '\n$protobuf.roots.default.${namespance}=${namespance};'
                     _a.sent();
                     minjs = UglifyJS.minify(pbjsResult);
                     return [4 /*yield*/, fs.writeFileAsync(output.replace('.js', '.min.js'), minjs.code, 'utf-8')];
                 case 18:
                     _a.sent();
-                    return [4 /*yield*/, shell('pbts', ['--main', output, '-o', tempfile])];
+                    pbts_args = ['--main', output, '-o', tempfile];
+                    if (namespance) {
+                        pbts_args.push("-n");
+                        pbts_args.push(namespance);
+                    }
+                    return [4 /*yield*/, shell('pbts', pbts_args)];
                 case 19:
                     _a.sent();
                     return [4 /*yield*/, fs.readFileAsync(tempfile, 'utf-8')];
                 case 20:
                     pbtsResult = _a.sent();
-                    pbtsResult = pbtsResult.replace(/\$protobuf/gi, "protobuf").replace(/export namespace/gi, 'declare namespace');
+                    pbtsResult = pbtsResult.replace(/\$protobuf/gi, "protobuf")
+                        .replace(/export namespace/gi, 'declare namespace');
+                    if (namespance) {
+                        pbtsResult = pbtsResult.replace("export = " + namespance + ";", "");
+                    }
+                    //  .replace(/export = (.)+;$/ig, "");
                     pbtsResult = 'type Long = protobuf.Long;\n' + pbtsResult;
                     return [4 /*yield*/, fs.writeFileAsync(output.replace(".js", ".d.ts"), pbtsResult, 'utf-8')];
                 case 21:
